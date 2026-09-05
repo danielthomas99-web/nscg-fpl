@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FPL Standings from CSV</title>
+  <style>
+    :root {
+      --fpl-purple: #37003c;
+      --fpl-green: #00ff87;
+      --fpl-bg: #ffffff;
+      --fpl-border: #e2e8f0;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
+      
+      /* Podium Theme Colors */
+      --gold-bg: linear-gradient(90deg, #fffbeb 0%, #fef3c7 100%);
+      --gold-accent: #d97706;
+      --gold-border: #fcd34d;
+      
+      --silver-bg: linear-gradient(90deg, #f8fafc 0%, #f1f5f9 100%);
+      --silver-accent: #64748b;
+      --silver-border: #cbd5e1;
+      
+      --bronze-bg: linear-gradient(90deg, #fff7ed 0%, #ffedd5 100%);
+      --bronze-accent: #c2410c;
+      --bronze-border: #fdba74;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 12px;
+      background: transparent;
+      color: var(--text-main);
+    }
+
+    .fpl-card {
+      width: 100%;
+      max-width: 680px;
+      margin: 0 auto;
+      background: var(--fpl-bg);
+      border-radius: 14px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+      border: 1px solid var(--fpl-border);
+    }
+
+    .fpl-header {
+      background: var(--fpl-purple);
+      color: #ffffff;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .fpl-header h2 {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+
+    /* Optional CSV File Input Bar */
+    .upload-bar {
+      padding: 10px 20px;
+      background: #f1f5f9;
+      border-bottom: 1px solid var(--fpl-border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.8rem;
+    }
+
+    .upload-bar input[type="file"] {
+      font-size: 0.8rem;
+    }
+
+    .table-container {
+      overflow-x: auto;
+      max-height: 560px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    th, td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--fpl-border);
+    }
+
+    th {
+      background: #f8fafc;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    tbody tr:hover { background: #f8fafc; }
+
+    .col-rank {
+      font-weight: 700;
+      width: 48px;
+      text-align: center;
+      color: var(--fpl-purple);
+    }
+
+    .team-title { font-weight: 600; line-height: 1.25; }
+    .manager-name { font-size: 0.76rem; color: var(--text-muted); margin-top: 2px; }
+    .col-num { text-align: right; font-variant-numeric: tabular-nums; }
+    .total-points { font-weight: 700; color: var(--text-main); }
+
+    /* Podium Top 3 */
+    .podium-row td { border-bottom: 2px solid; }
+
+    .podium-1 { background: var(--gold-bg) !important; }
+    .podium-1 td { padding: 16px 14px; border-bottom-color: var(--gold-border); }
+    .podium-1 .col-rank { font-size: 1.45rem; }
+    .podium-1 .team-title { font-size: 1.08rem; color: #78350f; }
+    .podium-1 .manager-name { font-size: 0.85rem; color: #92400e; }
+    .podium-1 .total-points { font-size: 1.25rem; color: var(--gold-accent); }
+
+    .podium-2 { background: var(--silver-bg) !important; }
+    .podium-2 td { padding: 14px 14px; border-bottom-color: var(--silver-border); }
+    .podium-2 .col-rank { font-size: 1.35rem; }
+    .podium-2 .team-title { font-size: 1rem; color: #334155; }
+    .podium-2 .manager-name { font-size: 0.82rem; color: #475569; }
+    .podium-2 .total-points { font-size: 1.15rem; color: var(--silver-accent); }
+
+    .podium-3 { background: var(--bronze-bg) !important; }
+    .podium-3 td { padding: 13px 14px; border-bottom-color: var(--bronze-border); }
+    .podium-3 .col-rank { font-size: 1.25rem; }
+    .podium-3 .team-title { font-size: 0.95rem; color: #7c2d12; }
+    .podium-3 .manager-name { font-size: 0.80rem; color: #9a3412; }
+    .podium-3 .total-points { font-size: 1.1rem; color: var(--bronze-accent); }
+
+    .state-msg { padding: 36px 20px; text-align: center; color: var(--text-muted); font-size: 0.9rem; }
+    .fpl-footer { background: #f8fafc; padding: 10px 18px; border-top: 1px solid var(--fpl-border); text-align: right; font-size: 0.72rem; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+  <div class="fpl-card">
+    <div class="fpl-header">
+      <h2 id="league-title">NSCG Fantasy League</h2>
+      <span style="font-size:0.75rem; color:var(--fpl-green); font-weight:700;">● CSV Mode</span>
+    </div>
+
+    <!-- Upload bar if you want to test files locally; you can remove or hide this if fetching from GitHub -->
+    <div class="upload-bar">
+      <span>Upload CSV:</span>
+      <input type="file" id="csvFileInput" accept=".csv" />
+    </div>
+
+    <div class="table-container">
+      <div id="statusMessage" class="state-msg">Loading data from standings.csv...</div>
+      <table id="standingsTable" style="display: none;">
+        <thead>
+          <tr>
+            <th class="col-rank">#</th>
+            <th style="text-align: left;">Team & Manager</th>
+            <th class="col-num">GW</th>
+            <th class="col-num">Total</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="fpl-footer" id="last-updated">Updated via CSV</div>
+  </div>
+
+  <script>
+    // 1. Expected CSV format:
+    // Rank,Team,Manager,GW,Total
+    // 1,Haalandic Heroes,Dan Thomas,72,1420
+
+    function parseCSV(text) {
+      const lines = text.trim().split(/\r\n|\n/);
+      const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+      const rows = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        const cols = lines[i].split(",").map(c => c.trim());
+        rows.push({
+          rank: cols[0],
+          team: cols[1],
+          manager: cols[2],
+          gw: cols[3],
+          total: cols[4]
+        });
+      }
+      return rows;
+    }
+
+    function renderTable(rows) {
+      const tbody = document.getElementById("tableBody");
+      const statusEl = document.getElementById("statusMessage");
+      const tableEl = document.getElementById("standingsTable");
+
+      tbody.innerHTML = "";
+
+      rows.forEach((row, index) => {
+        const tr = document.createElement("tr");
+        let rankDisplay = row.rank || (index + 1);
+
+        if (index === 0) {
+          tr.className = "podium-row podium-1";
+          rankDisplay = "🥇";
+        } else if (index === 1) {
+          tr.className = "podium-row podium-2";
+          rankDisplay = "🥈";
+        } else if (index === 2) {
+          tr.className = "podium-row podium-3";
+          rankDisplay = "🥉";
+        }
+
+        tr.innerHTML = `
+          <td class="col-rank">${rankDisplay}</td>
+          <td>
+            <div class="team-title">${escapeHTML(row.team)}</div>
+            <div class="manager-name">${escapeHTML(row.manager || '')}</div>
+          </td>
+          <td class="col-num">${row.gw || '-'}</td>
+          <td class="col-num total-points">${row.total || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      statusEl.style.display = "none";
+      tableEl.style.display = "table";
+    }
+
+    function escapeHTML(str) {
+      return String(str).replace(/[&<>'"]/g, t => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[t] || t));
+    }
+
+    // Attempt to automatically fetch "standings.csv" in the same folder/repo
+    async function loadDefaultCSV() {
+      try {
+        const res = await fetch("standings.csv");
+        if (!res.ok) throw new Error("No default standings.csv found.");
+        const text = await res.text();
+        renderTable(parseCSV(text));
+      } catch (err) {
+        document.getElementById("statusMessage").textContent = "Upload a CSV above or add standings.csv to your repo.";
+      }
+    }
+
+    // Listen for manual file uploads
+    document.getElementById("csvFileInput").addEventListener("change", function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        renderTable(parseCSV(evt.target.result));
+      };
+      reader.readAsText(file);
+    });
+
+    loadDefaultCSV();
+  </script>
+</body>
+</html>
